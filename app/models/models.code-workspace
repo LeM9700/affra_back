@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../schemas"
+		},
+		{
+			"path": "../services"
+		},
+		{
+			"path": "../api"
+		},
+		{
+			"path": "../jobs"
+		},
+		{
+			"path": "../middleware"
+		}
+	]
+}
