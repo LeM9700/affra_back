@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +10,20 @@ from app.api.auth import router as auth_router
 from app.config import settings
 from app.jobs.cleanup import start_scheduler, stop_scheduler
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    start_scheduler()
+    try:
+        start_scheduler()
+    except Exception:
+        logger.exception("Failed to start APScheduler; continuing without background jobs")
     yield
-    stop_scheduler()
+    try:
+        stop_scheduler()
+    except Exception:
+        logger.exception("Failed to stop APScheduler cleanly")
 
 
 app = FastAPI(
