@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -26,10 +27,15 @@ HEADERS = [
 ]
 
 
+def _get_credentials() -> Credentials:
+    value = settings.google_service_account_json.strip()
+    if value.startswith("{"):
+        return Credentials.from_service_account_info(json.loads(value), scopes=SCOPES)
+    return Credentials.from_service_account_file(value, scopes=SCOPES)
+
+
 def _get_sheet() -> gspread.Worksheet:
-    creds = Credentials.from_service_account_file(
-        settings.google_service_account_json, scopes=SCOPES
-    )
+    creds = _get_credentials()
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(settings.google_sheets_spreadsheet_id)
     sheet = spreadsheet.sheet1
