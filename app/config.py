@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,14 @@ class Settings(BaseSettings):
         "http://localhost:8080",
         "http://localhost:3001",
     ]
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        # Railway often provides postgresql://...; force async SQLAlchemy driver.
+        if isinstance(value, str) and value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
     @property
     def is_dev(self) -> bool:
