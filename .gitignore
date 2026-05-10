@@ -7,3 +7,4 @@ venv/
 dist/
 *.egg-info/
 .pytest_cache/
+app/service-account-sheets.json
