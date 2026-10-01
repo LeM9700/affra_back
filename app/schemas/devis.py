@@ -21,6 +21,9 @@ class DevisCreate(BaseModel):
     # Anti-spam honeypot (doit rester vide)
     website: str | None = Field(None, max_length=0)
 
+    # Attribution : valeur du cookie first-party affra_vid, lue côté serveur par Next.js (optionnelle)
+    anonymous_id: uuid.UUID | None = None
+
     @field_validator("website")
     @classmethod
     def honeypot_must_be_empty(cls, v: str | None) -> str | None:

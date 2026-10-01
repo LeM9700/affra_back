@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,3 +34,7 @@ class Devis(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     subvention_type: Mapped[str | None] = mapped_column(String(30))
     subvention_statut: Mapped[str | None] = mapped_column(String(30))
+    # Attribution : le devis est rattaché à un Lead (qui porte le Visitor et la décision financière).
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leads.id", ondelete="SET NULL"), index=True
+    )

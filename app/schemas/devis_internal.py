@@ -27,6 +27,7 @@ class DevisInternalResponse(BaseModel):
     notes: str | None
     subvention_type: str | None
     subvention_statut: str | None
+    lead_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
