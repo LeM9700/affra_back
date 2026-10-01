@@ -34,11 +34,12 @@ async def list_devis(
         query = query.where(Devis.statut == statut)
 
     if search:
+        # La colonne `nom` a été supprimée par la migration 0003 : ne pas la réintroduire ici.
         pattern = f"%{search}%"
         query = query.where(
-            Devis.nom.ilike(pattern)
-            | Devis.prenom.ilike(pattern)
+            Devis.prenom.ilike(pattern)
             | Devis.email.ilike(pattern)
+            | Devis.telephone.ilike(pattern)
             | Devis.ville.ilike(pattern)
         )
 
