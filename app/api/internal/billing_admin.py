@@ -14,7 +14,7 @@ from app.schemas.billing import (
     InvoiceListResponse,
     InvoiceOut,
 )
-from app.schemas.lead import PhoneClickOut
+from app.schemas.lead import PhoneClickOut, ProspectListResponse
 from app.services import billing_service, reporting_service
 
 invoices_router = APIRouter(dependencies=[Depends(verify_api_key), Depends(verify_jwt_token)])
@@ -73,6 +73,21 @@ async def attribution_stats(
     date_to: date | None = Query(None),
 ):
     return await reporting_service.compute_stats(db, date_from, date_to)
+
+
+@attribution_router.get("/prospects", response_model=ProspectListResponse)
+async def prospects(
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(60, ge=1, le=395),
+    visitor_id: uuid.UUID | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Visiteurs qui ont cliqué sur téléphone / email / WhatsApp ou commencé un devis, sans lead associé."""
+    items, total = await reporting_service.list_prospects(
+        db, days=days, visitor_id=visitor_id, limit=limit, offset=offset
+    )
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @attribution_router.get("/phone-clicks", response_model=list[PhoneClickOut])

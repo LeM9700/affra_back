@@ -26,6 +26,15 @@ from app.models.lead import AttributionDecision, Lead
 from app.schemas.lead import LeadCreate
 from app.services import attribution_service, billing_service
 
+# Actions d'un visiteur qui font de lui un « prospect » à qualifier.
+CONTACT_EVENT_TYPES = (
+    EventType.PHONE_CLICK,
+    EventType.EMAIL_CLICK,
+    EventType.WHATSAPP_CLICK,
+    EventType.QUOTE_STARTED,
+)
+CONTACT_EVENT_VALUES = tuple(t.value for t in CONTACT_EVENT_TYPES)
+
 
 class LeadError(Exception):
     def __init__(self, message: str, status_code: int = 400) -> None:
@@ -165,16 +174,26 @@ async def attach_devis_to_lead(db: AsyncSession, devis: Devis, visitor: Visitor 
 async def create_manual_lead(db: AsyncSession, payload: LeadCreate, admin_id: uuid.UUID) -> Lead:
     visitor: Visitor | None = None
     click: AttributionEvent | None = None
-    if payload.phone_click_event_id:
+    if payload.visitor_id:
+        # Passage « prospect → lead » : tout l'historique du visiteur est rattaché au lead.
+        visitor = (
+            await db.execute(select(Visitor).where(Visitor.id == payload.visitor_id).with_for_update())
+        ).scalar_one_or_none()
+        if visitor is None:
+            raise LeadError("Prospect introuvable", 404)
+        already = await db.execute(select(Lead.id).where(Lead.visitor_id == visitor.id).limit(1))
+        if already.first() is not None:
+            raise LeadError("Ce prospect est déjà rattaché à un lead", 409)
+    elif payload.phone_click_event_id:
         click = (
             await db.execute(
                 select(AttributionEvent).where(AttributionEvent.id == payload.phone_click_event_id).with_for_update()
             )
         ).scalar_one_or_none()
-        if click is None or click.event_type != EventType.PHONE_CLICK.value:
-            raise LeadError("Clic téléphone introuvable", 404)
+        if click is None or click.event_type not in CONTACT_EVENT_VALUES:
+            raise LeadError("Événement de contact introuvable", 404)
         if click.lead_id is not None:
-            raise LeadError("Ce clic téléphone est déjà rattaché à un lead", 409)
+            raise LeadError("Cet événement est déjà rattaché à un lead", 409)
         if click.visitor_id:
             visitor = await db.get(Visitor, click.visitor_id)
 

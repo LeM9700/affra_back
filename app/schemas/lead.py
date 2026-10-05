@@ -33,6 +33,8 @@ class LeadCreate(_Strict):
     channel: LeadChannel = LeadChannel.PHONE
     notes: str | None = Field(None, max_length=5000)
 
+    # Origine web (au plus une des deux) : un prospect entier, ou un événement de contact précis.
+    visitor_id: uuid.UUID | None = None
     phone_click_event_id: uuid.UUID | None = None
     declared_source: MarketingSource | None = None
 
@@ -42,6 +44,8 @@ class LeadCreate(_Strict):
 
     @model_validator(mode="after")
     def _contact_required(self) -> "LeadCreate":
+        if self.visitor_id and self.phone_click_event_id:
+            raise ValueError("visitor_id et phone_click_event_id sont exclusifs")
         if not (self.email or self.telephone):
             raise ValueError("email ou téléphone requis")
         if not (self.prenom or self.nom):
@@ -191,3 +195,27 @@ class PhoneClickOut(BaseModel):
     medium: str | None
     page_path: str | None
     visitor_id: uuid.UUID | None
+
+
+class ProspectItem(BaseModel):
+    """Visiteur ayant agi (clic contact, devis commencé) mais pas encore rattaché à un lead."""
+
+    visitor_id: uuid.UUID
+    first_seen_at: datetime
+    last_event_at: datetime
+    last_event_type: str
+    last_page_path: str | None
+    events_count: int
+    phone_clicks: int
+    email_clicks: int
+    whatsapp_clicks: int
+    quote_started: int
+    first_touch: TouchOut
+    last_touch: TouchOut
+
+
+class ProspectListResponse(BaseModel):
+    items: list[ProspectItem]
+    total: int
+    limit: int
+    offset: int

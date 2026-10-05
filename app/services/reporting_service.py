@@ -2,7 +2,7 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import Select, and_, case, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -194,6 +194,73 @@ async def list_unlinked_phone_clicks(db: AsyncSession, hours: int, limit: int) -
             )
         ).scalars()
     )
+
+
+# ---------------------------------------------------------------- Prospects
+
+
+async def list_prospects(
+    db: AsyncSession, *, days: int, visitor_id: uuid.UUID | None, limit: int, offset: int
+) -> tuple[list[dict], int]:
+    """Visiteurs avec au moins une action de contact et AUCUN lead, du plus récent au plus ancien."""
+    from app.services.lead_service import CONTACT_EVENT_VALUES  # import tardif : évite un import circulaire
+
+    ev = AttributionEvent
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    query = (
+        select(
+            Visitor,
+            func.max(ev.created_at).label("last_event_at"),
+            func.count(ev.id).label("events_count"),
+            func.count(ev.id).filter(ev.event_type == EventType.PHONE_CLICK.value).label("phone_clicks"),
+            func.count(ev.id).filter(ev.event_type == EventType.EMAIL_CLICK.value).label("email_clicks"),
+            func.count(ev.id).filter(ev.event_type == EventType.WHATSAPP_CLICK.value).label("whatsapp_clicks"),
+            func.count(ev.id).filter(ev.event_type == EventType.QUOTE_STARTED.value).label("quote_started"),
+        )
+        .join(ev, ev.visitor_id == Visitor.id)
+        .where(
+            ev.event_type.in_(CONTACT_EVENT_VALUES),
+            ev.created_at >= since,
+            ~exists(select(Lead.id).where(Lead.visitor_id == Visitor.id)),
+        )
+        .group_by(Visitor.id)
+        .order_by(func.max(ev.created_at).desc())
+    )
+    if visitor_id:
+        query = query.where(Visitor.id == visitor_id)
+
+    rows, total = await _paginate(db, query, limit, offset)
+    ids = [row[0].id for row in rows]
+    last_events: dict[uuid.UUID, tuple[str, str | None]] = {}
+    if ids:
+        latest = await db.execute(
+            select(ev.visitor_id, ev.event_type, ev.page_path)
+            .where(ev.visitor_id.in_(ids), ev.event_type.in_(CONTACT_EVENT_VALUES))
+            .distinct(ev.visitor_id)
+            .order_by(ev.visitor_id, ev.created_at.desc())
+        )
+        last_events = {vid: (etype, page) for vid, etype, page in latest.all()}
+
+    items = []
+    for visitor, last_at, count, phone, email, whatsapp, quote in rows:
+        last_type, last_page = last_events.get(visitor.id, ("", None))
+        items.append(
+            {
+                "visitor_id": visitor.id,
+                "first_seen_at": visitor.first_seen_at,
+                "last_event_at": last_at,
+                "last_event_type": last_type,
+                "last_page_path": last_page,
+                "events_count": count,
+                "phone_clicks": phone,
+                "email_clicks": email,
+                "whatsapp_clicks": whatsapp,
+                "quote_started": quote,
+                "first_touch": _touch(visitor, "first"),
+                "last_touch": _touch(visitor, "last"),
+            }
+        )
+    return items, total
 
 
 # ---------------------------------------------------------------- Factures
