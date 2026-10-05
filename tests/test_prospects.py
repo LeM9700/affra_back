@@ -104,3 +104,26 @@ async def test_prospects_filters_pagination_and_auth(client, admin_client):
     one = await _prospects(admin_client, visitor_id=page["items"][0]["visitor_id"])
     assert one["total"] == 1
     assert (await client.get("/internal/attribution/prospects")).status_code == 401
+
+
+async def test_client_status_is_automatic_and_locked(client, admin_client):
+    from tests.helpers import invoice_payload, lead_id_for_email
+
+    vid = new_vid()
+    await visit(client, vid, referrer="https://www.google.fr/")
+    await submit_devis(client, vid, email="statut@example.com")
+    lead_id = await lead_id_for_email(admin_client, "statut@example.com")
+
+    # « client » ne peut pas être posé à la main
+    manual = await admin_client.patch(f"/internal/leads/{lead_id}", json={"status": "client"})
+    assert manual.status_code == 422
+    assert (await admin_client.patch(f"/internal/leads/{lead_id}", json={"status": "en_cours"})).status_code == 200
+
+    # il vient de la première facture, puis le statut est verrouillé
+    assert (await admin_client.post(f"/internal/leads/{lead_id}/invoices", json=invoice_payload(150_000))).status_code == 201
+    detail = (await admin_client.get(f"/internal/leads/{lead_id}")).json()
+    assert detail["status"] == "client"
+    locked = await admin_client.patch(f"/internal/leads/{lead_id}", json={"status": "perdu"})
+    assert locked.status_code == 409
+    # les coordonnées restent modifiables
+    assert (await admin_client.patch(f"/internal/leads/{lead_id}", json={"ville": "Uzès"})).status_code == 200

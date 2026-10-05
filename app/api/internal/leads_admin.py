@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, verify_api_key, verify_jwt_token
+from app.models.billing import Customer
 from app.models.enums import FinancialAttribution, LeadStatus, MarketingSource
 from app.models.lead import Lead
 from app.schemas.billing import InvoiceCreate, InvoiceCreateResult, InvoiceOut
@@ -75,6 +76,12 @@ async def update_lead(lead_id: uuid.UUID, payload: LeadUpdate, db: AsyncSession 
     lead = await db.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    if payload.status is not None:
+        is_customer = (await db.execute(select(Customer.id).where(Customer.lead_id == lead_id))).first() is not None
+        if is_customer:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Ce lead est un client : son statut ne peut plus être modifié"
+            )
     for field, value in payload.model_dump(exclude_unset=True, mode="json").items():
         setattr(lead, field, value)
     await db.flush()

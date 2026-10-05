@@ -64,6 +64,12 @@ class LeadUpdate(_Strict):
     status: LeadStatus | None = None
     notes: str | None = Field(None, max_length=5000)
 
+    @model_validator(mode="after")
+    def _client_status_is_automatic(self) -> "LeadUpdate":
+        if self.status == LeadStatus.CLIENT:
+            raise ValueError("Le statut « client » est attribué automatiquement à la première facture")
+        return self
+
 
 class AttributionDecisionCreate(_Strict):
     financial_attribution: FinancialAttribution
