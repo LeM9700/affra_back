@@ -32,6 +32,8 @@ os.environ.update(
         "ENVIRONMENT": "test",
         "RESEND_API_KEY": "",
         "OPERATOR_EMAIL": "",
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_CHAT_ID": "",
         "GOOGLE_SERVICE_ACCOUNT_JSON": "",
         "GOOGLE_SHEETS_SPREADSHEET_ID": "",
         "NEXTJS_REVALIDATE_URL": "",

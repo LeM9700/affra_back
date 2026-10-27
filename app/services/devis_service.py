@@ -10,7 +10,6 @@ from app.models.enums import EventType
 from app.models.lead import Lead
 from app.schemas.devis import DevisCreate
 from app.services import attribution_service, lead_service
-from app.services.email_service import send_operator_notification, send_prospect_confirmation
 from app.services.sheets_service import append_devis_to_sheet
 
 logger = logging.getLogger(__name__)
@@ -60,13 +59,8 @@ async def create_devis(db: AsyncSession, payload: DevisCreate) -> Devis:
 
     lead, visitor = await _attach_attribution(db, devis, payload.anonymous_id)
 
-    # Send emails + Google Sheets (best-effort — don't block on failure)
-    try:
-        await send_operator_notification(devis)
-        await send_prospect_confirmation(devis)
-    except Exception:
-        pass  # Logged by email_service
-
+    # Notifications (email + Telegram) : planifiées par la route, après le commit.
+    # Google Sheets : best-effort, ne doit pas bloquer la demande.
     try:
         await append_devis_to_sheet(devis, lead=lead, visitor=visitor)
     except Exception:
