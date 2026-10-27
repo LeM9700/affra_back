@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     operator_email: str = ""
 
+    # Telegram (alertes gérant)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
+    # Lien vers le dashboard interne, inclus dans les alertes
+    dashboard_url: str = "https://dash-track-affra.netlify.app/"
+
     # Google Sheets
     google_service_account_json: str = ""
     google_sheets_spreadsheet_id: str = ""
