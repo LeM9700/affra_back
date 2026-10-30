@@ -63,7 +63,7 @@ API_HEADERS = {"X-API-Key": "test-api-key"}
 
 TABLES = (
     "commissions", "invoice_lines", "customer_invoices", "invoice_sequences", "customers", "attribution_events",
-    "attribution_decisions", "leads", "visitors", "devis", "admin_users",
+    "attribution_decisions", "leads", "visitors", "devis", "admin_users", "blog_posts",
 )
 
 
