@@ -7,26 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, verify_api_key
 from app.models.blog import BlogPost
 from app.schemas.blog import BlogPostCreate, BlogPostPublic, BlogPostUpdate
-from app.services.revalidation_service import trigger_revalidation
+from app.services.blog_service import revalidate_blog
 
 router = APIRouter(dependencies=[Depends(verify_api_key)])
-
-
-async def _revalidate_blog(slug: str, *, article_page: bool) -> None:
-    """Revalidate the blog index and, when relevant, the article page.
-
-    Must be called AFTER the transaction is committed: the frontend re-reads the API
-    as soon as it is notified, and would otherwise cache the previous state.
-
-    Args:
-        slug: Slug of the affected article.
-        article_page: Whether the article URL is (or just stopped being) public. A draft
-            that stays a draft is skipped: its URL never existed, and the frontend would
-            report it to search engines (IndexNow).
-    """
-    await trigger_revalidation("/blog")
-    if article_page:
-        await trigger_revalidation(f"/blog/{slug}")
 
 
 @router.post("", response_model=BlogPostPublic, status_code=status.HTTP_201_CREATED)
@@ -34,7 +17,7 @@ async def create_post(payload: BlogPostCreate, db: AsyncSession = Depends(get_db
     post = BlogPost(**payload.model_dump())
     db.add(post)
     await db.commit()
-    await _revalidate_blog(post.slug, article_page=post.published)
+    await revalidate_blog(post.slug, article_page=post.published)
     return post
 
 
@@ -53,7 +36,7 @@ async def update_post(
         setattr(post, field, value)
     await db.commit()
     # Unpublishing also revalidates the article page, so that it turns into a 404.
-    await _revalidate_blog(post.slug, article_page=was_published or post.published)
+    await revalidate_blog(post.slug, article_page=was_published or post.published)
     return post
 
 
@@ -67,4 +50,4 @@ async def delete_post(post_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     await db.delete(post)
     await db.commit()
     # Without revalidating the article page, a deleted article stays cached and online.
-    await _revalidate_blog(slug, article_page=was_published)
+    await revalidate_blog(slug, article_page=was_published)

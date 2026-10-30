@@ -8,8 +8,8 @@ import pytest
 from sqlalchemy import select
 
 from app import database
-from app.api.internal import blog_admin
 from app.models.blog import BlogPost
+from app.services import blog_service
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def revalidations(monkeypatch) -> list[tuple[str, dict[str, bool]]]:
             rows = (await other.execute(select(BlogPost.slug, BlogPost.published))).all()
         calls.append((path, {slug: published for slug, published in rows}))
 
-    monkeypatch.setattr(blog_admin, "trigger_revalidation", record)
+    monkeypatch.setattr(blog_service, "trigger_revalidation", record)
     return calls
 
 
