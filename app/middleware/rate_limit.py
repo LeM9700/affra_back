@@ -59,12 +59,23 @@ class SlidingWindowRateLimiter:
         for key in [k for k, v in self._hits.items() if not v or v[-1] <= cutoff]:
             del self._hits[key]
 
+    def allow(self, key: str) -> bool:
+        """Comme check(), mais renvoie False au lieu de lever une erreur HTTP."""
+        try:
+            self.check(key)
+        except HTTPException:
+            return False
+        return True
+
     def reset(self) -> None:
         self._hits.clear()
 
 
 devis_limiter = SlidingWindowRateLimiter(5, 3600, "Trop de demandes. Réessayez dans une heure.")
 attribution_limiter = SlidingWindowRateLimiter(60, 60, "Too many attribution events")
+callback_limiter = SlidingWindowRateLimiter(3, 3600, "Trop de demandes de rappel. Réessayez plus tard.")
+# Plafond GLOBAL d'alertes Telegram « demande de rappel » (clé unique) : anti-inondation du chat.
+telegram_callback_limiter = SlidingWindowRateLimiter(20, 3600, "Telegram callback alerts capped")
 
 
 async def check_devis_rate_limit(ip: str) -> None:
@@ -73,3 +84,7 @@ async def check_devis_rate_limit(ip: str) -> None:
 
 async def check_attribution_rate_limit(ip: str) -> None:
     attribution_limiter.check(ip)
+
+
+async def check_callback_rate_limit(ip: str) -> None:
+    callback_limiter.check(ip)

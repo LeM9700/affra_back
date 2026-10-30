@@ -131,6 +131,40 @@ async def _create_lead(
     return lead
 
 
+def split_contact_name(contact_name: str | None, prenom: str | None) -> str | None:
+    """Nom de famille à déduire du nom donné au bouton de rappel, sans répéter le prénom du devis.
+
+    « Camille Martin » + prénom « Camille » → « Martin » ; sans prénom → le nom complet ;
+    prénom différent → None (on ne mélange pas deux identités, le nom complet reste sur le visiteur).
+
+    Args:
+        contact_name: Nom saisi dans la demande de rappel.
+        prenom: Prénom saisi dans le devis.
+
+    Returns:
+        Le nom de famille à enregistrer sur le lead, ou None.
+    """
+    if not contact_name:
+        return None
+    if not prenom:
+        return contact_name
+    first, _, rest = contact_name.partition(" ")
+    if first.casefold() == prenom.strip().casefold():
+        return rest.strip() or None
+    return None
+
+
+def _complete_from_identity(lead: Lead, visitor: Visitor | None) -> None:
+    """Prospect identifié qui devient lead : complète le lead avec le nom et le téléphone du rappel."""
+    if visitor is None or visitor.contact_phone is None:
+        return
+    lead.telephone = lead.telephone or visitor.contact_phone
+    if not lead.nom:
+        lead.nom = split_contact_name(visitor.contact_name, lead.prenom)
+    if not lead.prenom and not lead.nom:
+        lead.nom = visitor.contact_name
+
+
 async def attach_devis_to_lead(db: AsyncSession, devis: Devis, visitor: Visitor | None) -> Lead:
     """Rattache un devis au lead existant de même email, sinon crée le lead (canal FORM)."""
     existing = (
@@ -166,6 +200,7 @@ async def attach_devis_to_lead(db: AsyncSession, devis: Devis, visitor: Visitor 
             ville=devis.ville,
         )
 
+    _complete_from_identity(lead, visitor)
     devis.lead_id = lead.id
     await db.flush()
     return lead

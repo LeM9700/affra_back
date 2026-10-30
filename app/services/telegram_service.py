@@ -5,11 +5,28 @@ import httpx
 
 from app.config import settings
 from app.models.devis import Devis
+from app.services.attribution_service import CallbackSummary
+from app.services.phone import format_french_phone
 
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
 REQUEST_TIMEOUT_SECONDS = 5.0
+
+# Libellés des sources (mêmes libellés que le dashboard).
+SOURCE_LABELS = {
+    "GOOGLE_ORGANIC": "Google (naturel)",
+    "GOOGLE_BUSINESS": "Fiche Google",
+    "GOOGLE_ADS": "Google Ads",
+    "BING_ORGANIC": "Bing",
+    "CHATGPT": "ChatGPT",
+    "CLAUDE": "Claude",
+    "PERPLEXITY": "Perplexity",
+    "GEMINI": "Gemini",
+    "REFERRAL": "Site référent",
+    "DIRECT": "Accès direct",
+    "UNKNOWN": "Inconnue",
+}
 
 # Libellés lisibles des réponses du questionnaire (valeurs validées par DevisCreate).
 _LABELS = {
@@ -61,13 +78,10 @@ def format_devis_message(devis: Devis) -> str:
     )
 
 
-async def send_devis_notification(devis: Devis) -> None:
-    """Envoie l'alerte « nouveau devis » dans le chat Telegram du gérant.
+async def _send_text(text: str) -> None:
+    """Envoie un message texte brut dans le chat du gérant (aucun parse_mode : pas d'injection de formatage).
 
     Ne fait rien si TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID n'est pas configuré.
-
-    Args:
-        devis: La demande de devis nouvellement enregistrée.
 
     Raises:
         TelegramNotificationError: Si Telegram est injoignable ou refuse le message.
@@ -79,7 +93,7 @@ async def send_devis_notification(devis: Devis) -> None:
     url = TELEGRAM_API_URL.format(token=settings.telegram_bot_token)
     payload = {
         "chat_id": settings.telegram_chat_id,
-        "text": format_devis_message(devis),
+        "text": text,
         "link_preview_options": {"is_disabled": True},
     }
     try:
@@ -95,3 +109,56 @@ async def send_devis_notification(devis: Devis) -> None:
         except ValueError:
             description = ""
         raise TelegramNotificationError(f"Telegram rejected message: HTTP {response.status_code} {description}")
+
+
+async def send_devis_notification(devis: Devis) -> None:
+    """Envoie l'alerte « nouveau devis » dans le chat Telegram du gérant.
+
+    Args:
+        devis: La demande de devis nouvellement enregistrée.
+
+    Raises:
+        TelegramNotificationError: Si Telegram est injoignable ou refuse le message.
+    """
+    await _send_text(format_devis_message(devis))
+
+
+def format_callback_message(summary: CallbackSummary) -> str:
+    """Construit l'alerte « demande de rappel » : identité, provenance et dernières pages vues.
+
+    Args:
+        summary: Instantané de la demande, pris avant le commit.
+
+    Returns:
+        Le corps du message Telegram (texte brut).
+    """
+    pages = "\n".join(f"   • {page}" for page in summary.recent_pages) or "   —"
+    origin = SOURCE_LABELS.get(summary.source or "", summary.source or "—")
+    first = SOURCE_LABELS.get(summary.first_source or "", summary.first_source or "—")
+    status = "déjà lead" if summary.lead_id else "prospect identifié"
+    link = f"{settings.dashboard_url.rstrip('/')}/prospects/{summary.visitor_id}"
+    return (
+        "📞 Demande de rappel — visite technique gratuite\n"
+        "\n"
+        f"👤 {summary.name}\n"
+        f"📞 {format_french_phone(summary.phone)}\n"
+        f"🏷 Statut : {status}\n"
+        "\n"
+        f"🔎 Provenance : {origin} (1re visite : {first})\n"
+        f"📄 Pages vues : {summary.page_views}\n"
+        f"{pages}\n"
+        "\n"
+        f"👉 Fiche : {link}"
+    )
+
+
+async def send_callback_notification(summary: CallbackSummary) -> None:
+    """Prévient le gérant d'une demande de rappel.
+
+    Args:
+        summary: Instantané de la demande.
+
+    Raises:
+        TelegramNotificationError: Si Telegram est injoignable ou refuse le message.
+    """
+    await _send_text(format_callback_message(summary))

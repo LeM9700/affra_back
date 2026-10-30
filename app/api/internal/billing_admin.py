@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from app.schemas.billing import (
     InvoiceListResponse,
     InvoiceOut,
 )
-from app.schemas.lead import PhoneClickOut, ProspectListResponse
+from app.schemas.lead import PhoneClickOut, ProspectListResponse, VisitorDetail
 from app.services import billing_service, reporting_service
 
 invoices_router = APIRouter(dependencies=[Depends(verify_api_key), Depends(verify_jwt_token)])
@@ -78,16 +79,27 @@ async def attribution_stats(
 @attribution_router.get("/prospects", response_model=ProspectListResponse)
 async def prospects(
     db: AsyncSession = Depends(get_db),
-    days: int = Query(60, ge=1, le=395),
+    days: int = Query(30, ge=1, le=395),
+    kind: Literal["all", "identified", "contact"] = Query("all"),
+    search: str | None = Query(None, max_length=100),
     visitor_id: uuid.UUID | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """Visiteurs qui ont cliqué sur téléphone / email / WhatsApp ou commencé un devis, sans lead associé."""
+    """Une ligne par visiteur sans lead (anonyme ou identifié), actif sur la période."""
     items, total = await reporting_service.list_prospects(
-        db, days=days, visitor_id=visitor_id, limit=limit, offset=offset
+        db, days=days, kind=kind, search=search, visitor_id=visitor_id, limit=limit, offset=offset
     )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@attribution_router.get("/visitors/{visitor_id}", response_model=VisitorDetail)
+async def visitor_detail(visitor_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Fiche visiteur : identité, provenance et chronologie complète (entrées, pages vues, actions)."""
+    detail = await reporting_service.get_visitor_detail(db, visitor_id)
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+    return detail
 
 
 @attribution_router.get("/phone-clicks", response_model=list[PhoneClickOut])

@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.services.phone import InvalidPhoneError, normalize_french_phone
+
 _CLICK_ID = r"^[A-Za-z0-9_\-\.]{1,255}$"
 _META_KEY = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 _FORBIDDEN_META_FRAGMENTS = (
@@ -70,7 +72,7 @@ class VisitIn(_StrictModel):
 class EventIn(_StrictModel):
     anonymous_id: uuid.UUID
     client_event_id: uuid.UUID
-    event_type: Literal["QUOTE_STARTED", "PHONE_CLICK", "EMAIL_CLICK", "WHATSAPP_CLICK"]
+    event_type: Literal["QUOTE_STARTED", "PHONE_CLICK", "EMAIL_CLICK", "WHATSAPP_CLICK", "PAGE_VIEW"]
     page_path: str | None = Field(None, max_length=2048)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -82,6 +84,34 @@ class EventIn(_StrictModel):
         if not isinstance(value, dict):
             raise ValueError("metadata must be an object")
         return validate_metadata(value)
+
+
+class CallbackIn(_StrictModel):
+    """Demande de rappel (bouton du site). Le consentement explicite est obligatoire."""
+
+    anonymous_id: uuid.UUID
+    client_event_id: uuid.UUID
+    nom: str = Field(..., min_length=2, max_length=100)
+    telephone: str = Field(..., min_length=6, max_length=30)
+    consent: Literal[True]
+    page_path: str | None = Field(None, max_length=2048)
+
+    @field_validator("nom")
+    @classmethod
+    def _check_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        # Lettres (accents compris), espaces, apostrophes, tirets et points : pas d'URL ni de balise.
+        if not re.fullmatch(r"[^\W\d_]+(?:[ '’.\-][^\W\d_]*)*", cleaned):
+            raise ValueError("nom invalide")
+        return cleaned
+
+    @field_validator("telephone")
+    @classmethod
+    def _check_phone(cls, value: str) -> str:
+        try:
+            return normalize_french_phone(value)
+        except InvalidPhoneError as exc:
+            raise ValueError(str(exc)) from None
 
 
 class AttributionAck(BaseModel):

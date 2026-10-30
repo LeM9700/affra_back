@@ -34,6 +34,10 @@ class EventType(StrEnum):
     PHONE_CLICK = "PHONE_CLICK"
     EMAIL_CLICK = "EMAIL_CLICK"
     WHATSAPP_CLICK = "WHATSAPP_CLICK"
+    # Changement de page (navigation côté navigateur).
+    PAGE_VIEW = "PAGE_VIEW"
+    # Demande de rappel via le bouton du site : généré côté serveur (porte le nom et le téléphone).
+    CALLBACK_REQUESTED = "CALLBACK_REQUESTED"
     # Réservé au futur call tracking (V2) — jamais accepté depuis l'endpoint public.
     PHONE_CALL = "PHONE_CALL"
 
@@ -42,7 +46,13 @@ class EventType(StrEnum):
 # LANDING passe par /visit ; QUOTE_SUBMITTED est généré côté serveur par create_devis ;
 # PHONE_CALL proviendra d'un fournisseur de call tracking.
 CLIENT_EVENT_TYPES: frozenset[EventType] = frozenset(
-    {EventType.QUOTE_STARTED, EventType.PHONE_CLICK, EventType.EMAIL_CLICK, EventType.WHATSAPP_CLICK}
+    {
+        EventType.QUOTE_STARTED,
+        EventType.PHONE_CLICK,
+        EventType.EMAIL_CLICK,
+        EventType.WHATSAPP_CLICK,
+        EventType.PAGE_VIEW,
+    }
 )
 
 

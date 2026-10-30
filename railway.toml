@@ -2,6 +2,10 @@
 builder = "nixpacks"
 
 [deploy]
+# Migrations appliquées AVANT la mise en ligne de la nouvelle version, dans un conteneur séparé :
+# si elles échouent, le déploiement est annulé et l'ancienne version reste en service.
+# (Hors du démarrage du serveur : n'allonge plus le cold start ni le healthcheck.)
+preDeployCommand = ["alembic upgrade head"]
 startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
