@@ -15,15 +15,17 @@ async def test_prospect_is_a_visitor_with_a_contact_action_and_no_lead(client, a
     await event(client, visitor_a, "PHONE_CLICK", page_path="/services/particuliers")
     await event(client, visitor_a, "PHONE_CLICK", page_path="/zone-intervention")
     await event(client, visitor_a, "EMAIL_CLICK", page_path="/")
-    await visit(client, visitor_b, referrer="https://chatgpt.com/")  # simple visite : pas un prospect
+    await visit(client, visitor_b, referrer="https://chatgpt.com/")  # simple visite : pas d'action de contact
     await visit(client, visitor_c, utm_source="google_business", utm_medium="organic_local")
     await event(client, visitor_c, "QUOTE_STARTED", page_path="/devis")
 
-    data = await _prospects(admin_client)
+    assert (await _prospects(admin_client))["total"] == 3  # « all » : chaque visiteur a sa ligne
+    data = await _prospects(admin_client, kind="contact")
     assert data["total"] == 2
     by_source = {p["last_touch"]["source"]: p for p in data["items"]}
     google = by_source["GOOGLE_ORGANIC"]
-    assert (google["phone_clicks"], google["email_clicks"], google["events_count"]) == (2, 1, 3)
+    assert (google["phone_clicks"], google["email_clicks"], google["contact_actions"]) == (2, 1, 3)
+    assert google["events_count"] == 4  # + l'entrée sur le site
     assert google["last_event_type"] == "EMAIL_CLICK"
     assert by_source["GOOGLE_BUSINESS"]["quote_started"] == 1
     assert "CHATGPT" not in by_source

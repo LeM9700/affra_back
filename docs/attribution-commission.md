@@ -57,6 +57,8 @@ Données minimisées :
 | `QUOTE_SUBMITTED` | serveur, dans `create_devis` : non falsifiable par le navigateur |
 | `PHONE_CLICK` / `EMAIL_CLICK` | navigateur (`TrackedPhoneLink`, `TrackedEmailLink`), en `sendBeacon` : l'ouverture du téléphone n'est jamais retardée |
 | `WHATSAPP_CLICK` | prévu dans le modèle ; aucun lien WhatsApp sur le site aujourd'hui |
+| `PAGE_VIEW` | navigateur, à chaque changement de page (robots filtrés par le proxy Next.js) |
+| `CALLBACK_REQUESTED` | serveur, dans `POST /api/v1/attribution/callback` (bouton « Être appelé ») |
 | `PHONE_CALL` | réservé au call tracking V2 ; refusé par l'endpoint public |
 
 Un événement est attribué au last touch du visiteur au moment où il se produit.
@@ -68,6 +70,29 @@ Protections de l'endpoint public `/api/v1/attribution/*` :
 - metadata limitée : 10 clés au plus, valeurs plates de 200 caractères au plus, 1 Ko au total, clés sensibles refusées ;
 - idempotence via `client_event_id` ;
 - rate limit de 60 requêtes par minute et par IP visiteur (`X-Client-IP`, posé par le serveur Next.js).
+
+## 4 bis. Prospects et prospects identifiés
+
+Le tableau « Prospects » du dashboard liste **une ligne par visiteur sans lead**, actif sur la période
+(30 jours par défaut) : `GET /internal/attribution/prospects?kind=all|identified|contact&search=&days=`.
+
+- **Anonyme** : visiteur repéré par son cookie, avec ses entrées, pages vues et actions.
+- **Prospect identifié** : le visiteur a utilisé le bouton « Être appelé pour une visite technique
+  gratuite ». Il a donné son nom et son téléphone, avec un consentement explicite (case obligatoire).
+  Il **n'est pas un lead** : `visitors.contact_*` est rempli, aucune ligne `leads` n'est créée, aucune
+  décision financière n'est prise. Le gérant est prévenu sur Telegram (nom, téléphone, provenance,
+  dernières pages vues, lien vers la fiche).
+- La fiche visiteur (`GET /internal/attribution/visitors/{id}`) donne la chronologie complète.
+- « Passer en lead » (`POST /internal/leads` avec `visitor_id`) rattache tout le parcours au lead.
+- Un prospect identifié qui envoie un devis devient lead automatiquement : le nom du rappel complète
+  le prénom du devis ; le téléphone du devis prime.
+
+Garde-fous de `POST /api/v1/attribution/callback` :
+- `consent: true` obligatoire ; nom en lettres uniquement ; téléphone français normalisé en E.164
+  (`app/services/phone.py`) ;
+- 3 demandes par heure et par IP visiteur, idempotence via `client_event_id` ;
+- plafond global de 20 alertes Telegram par heure (anti-inondation du chat du gérant) ;
+- en base : CHECK du format E.164 et interdiction d'une identité sans date de consentement.
 
 ## 5. Lead et attribution financière
 
@@ -172,7 +197,8 @@ Ce lien est classé `GOOGLE_BUSINESS`. Sans ces UTM, un clic depuis la fiche arr
 La purge quotidienne (`app/jobs/cleanup.py`) supprime :
 - les devis de plus de 12 mois (comportement existant) ;
 - les leads non clients inactifs depuis plus de 12 mois ;
-- les visiteurs inactifs depuis plus de 13 mois et sans lead.
+- les visiteurs inactifs depuis plus de 13 mois et sans lead, **identité comprise** (nom et téléphone
+  d'un prospect identifié qui n'est jamais devenu lead).
 
 Les leads devenus clients sont conservés, car leurs factures relèvent d'une obligation comptable.
 La metadata n'accepte ni secrets, ni tokens, ni cookies.

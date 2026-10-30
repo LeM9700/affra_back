@@ -7,16 +7,18 @@ Règles :
 - client_event_id rend chaque événement idempotent (double beacon, rejeu réseau).
 """
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.attribution import AttributionEvent, Visitor
 from app.models.enums import EventType, MarketingSource
+from app.models.lead import Lead
 from app.services.attribution_classifier import (
     Classification,
     TouchSignals,
@@ -157,4 +159,103 @@ async def link_visitor_events_to_lead(db: AsyncSession, visitor_id: uuid.UUID, l
         update(AttributionEvent)
         .where(AttributionEvent.visitor_id == visitor_id, AttributionEvent.lead_id.is_(None))
         .values(lead_id=lead_id)
+    )
+
+
+# Nombre de pages récentes reprises dans l'alerte Telegram d'une demande de rappel.
+CALLBACK_RECENT_PAGES = 5
+
+
+@dataclass(frozen=True)
+class CallbackSummary:
+    """Instantané d'une demande de rappel, pour la notification envoyée après le commit."""
+
+    visitor_id: uuid.UUID
+    name: str
+    phone: str
+    source: str | None
+    first_source: str | None
+    recent_pages: list[str]
+    page_views: int
+    lead_id: uuid.UUID | None
+    created: bool
+
+
+async def record_callback_request(
+    db: AsyncSession,
+    *,
+    anonymous_id: uuid.UUID,
+    client_event_id: uuid.UUID,
+    name: str,
+    phone_e164: str,
+    page_path: str | None,
+) -> CallbackSummary:
+    """Le visiteur demande à être rappelé : il devient un prospect identifié (pas un lead).
+
+    - l'identité la plus récente remplace la précédente (le visiteur a pu corriger son numéro) ;
+    - la date de consentement est celle de la demande ;
+    - un événement CALLBACK_REQUESTED est ajouté au parcours (idempotent via client_event_id) ;
+    - si le visiteur est déjà un lead, son téléphone est complété sans jamais être écrasé.
+
+    Args:
+        db: Session de la requête.
+        anonymous_id: Valeur du cookie affra_vid.
+        client_event_id: Identifiant unique de la demande (rejeu réseau sans doublon).
+        name: Nom validé.
+        phone_e164: Téléphone normalisé (+33…).
+        page_path: Page d'où la demande a été envoyée.
+
+    Returns:
+        Le résumé à notifier ; `created` vaut False si la demande avait déjà été reçue.
+    """
+    now = _now()
+    visitor = await get_or_create_visitor(db, anonymous_id)
+    visitor.contact_name = name
+    visitor.contact_phone = phone_e164
+    visitor.contact_consent_at = now
+    visitor.identified_at = visitor.identified_at or now
+    await db.flush()
+
+    created = await record_event(
+        db,
+        event_type=EventType.CALLBACK_REQUESTED,
+        visitor=visitor,
+        client_event_id=client_event_id,
+        page_path=page_path,
+    )
+
+    lead = (
+        await db.execute(select(Lead).where(Lead.visitor_id == visitor.id).order_by(Lead.created_at.desc()).limit(1))
+    ).scalar_one_or_none()
+    if lead is not None and not lead.telephone:
+        lead.telephone = phone_e164
+        await db.flush()
+
+    pages = (
+        await db.execute(
+            select(AttributionEvent.page_path)
+            .where(
+                AttributionEvent.visitor_id == visitor.id,
+                AttributionEvent.event_type == EventType.PAGE_VIEW.value,
+                AttributionEvent.page_path.is_not(None),
+            )
+            .order_by(AttributionEvent.created_at.desc())
+            .limit(CALLBACK_RECENT_PAGES)
+        )
+    ).scalars().all()
+    page_views = await db.scalar(
+        select(func.count(AttributionEvent.id)).where(
+            AttributionEvent.visitor_id == visitor.id, AttributionEvent.event_type == EventType.PAGE_VIEW.value
+        )
+    )
+    return CallbackSummary(
+        visitor_id=visitor.id,
+        name=name,
+        phone=phone_e164,
+        source=visitor.last_source,
+        first_source=visitor.first_source,
+        recent_pages=list(pages),
+        page_views=page_views or 0,
+        lead_id=lead.id if lead else None,
+        created=created,
     )

@@ -54,7 +54,12 @@ test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool, connect
 database.AsyncSessionLocal.configure(bind=test_engine)
 
 from app.main import app  # noqa: E402
-from app.middleware.rate_limit import attribution_limiter, devis_limiter  # noqa: E402
+from app.middleware.rate_limit import (  # noqa: E402
+    attribution_limiter,
+    callback_limiter,
+    devis_limiter,
+    telegram_callback_limiter,
+)
 from app.models.admin_user import AdminUser  # noqa: E402
 from app.services.auth_service import create_access_token  # noqa: E402
 
@@ -94,6 +99,8 @@ async def clean_database():
             await conn.execute(text(f"DELETE FROM {table}"))
     devis_limiter.reset()
     attribution_limiter.reset()
+    callback_limiter.reset()
+    telegram_callback_limiter.reset()
     yield
 
 

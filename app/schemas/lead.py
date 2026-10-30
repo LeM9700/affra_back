@@ -203,8 +203,17 @@ class PhoneClickOut(BaseModel):
     visitor_id: uuid.UUID | None
 
 
+class ProspectIdentityOut(BaseModel):
+    """Prospect identifié : nom et téléphone donnés via le bouton de rappel (avec consentement)."""
+
+    name: str | None
+    phone: str
+    consent_at: datetime
+    identified_at: datetime | None
+
+
 class ProspectItem(BaseModel):
-    """Visiteur ayant agi (clic contact, devis commencé) mais pas encore rattaché à un lead."""
+    """Visiteur actif sans lead : anonyme, ou identifié s'il a demandé à être rappelé."""
 
     visitor_id: uuid.UUID
     first_seen_at: datetime
@@ -212,10 +221,15 @@ class ProspectItem(BaseModel):
     last_event_type: str
     last_page_path: str | None
     events_count: int
+    page_views: int
+    visits: int
     phone_clicks: int
     email_clicks: int
     whatsapp_clicks: int
     quote_started: int
+    callback_requests: int
+    contact_actions: int
+    identity: ProspectIdentityOut | None
     first_touch: TouchOut
     last_touch: TouchOut
 
@@ -225,3 +239,21 @@ class ProspectListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class VisitorDetail(BaseModel):
+    """Fiche visiteur : parcours complet, identité éventuelle, lead éventuel."""
+
+    id: uuid.UUID
+    first_seen_at: datetime
+    last_seen_at: datetime
+    first_touch: TouchOut
+    last_touch: TouchOut
+    has_google_click_id: bool
+    identity: ProspectIdentityOut | None
+    lead_id: uuid.UUID | None
+    lead_status: str | None
+    customer_id: uuid.UUID | None
+    event_counts: dict[str, int]
+    events_total: int
+    events: list[EventOut]
