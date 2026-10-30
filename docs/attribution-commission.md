@@ -213,6 +213,13 @@ La metadata n'accepte ni secrets, ni tokens, ni cookies.
   - `billing_service.create_invoice_for_lead` est le point d'entrée unique à réutiliser.
 - **Import de factures (CSV)** : même point d'entrée, avec `source_system = 'IMPORT'`.
 
+## 10 bis. Déploiement (Railway)
+
+Les migrations Alembic sont appliquées par `preDeployCommand = ["alembic upgrade head"]`
+(`railway.toml`), avant la mise en ligne de chaque nouvelle version. En cas d'échec, Railway annule
+le déploiement et l'ancienne version reste en service. Toute migration doit donc rester compatible
+avec la version précédente du code le temps du basculement (ajouts plutôt que suppressions).
+
 ## 11. Tests
 
 ```bash
