@@ -24,6 +24,18 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # Stockage des factures importées (Cloudflare R2, API S3) — cf. docs/cloudflare-r2.md.
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = ""
+    # « eu » : bucket créé dans la juridiction UE (endpoint <compte>.eu.r2.cloudflarestorage.com).
+    r2_jurisdiction: str = "eu"
+
+    # Lecture IA de secours des factures scannées / d'un autre modèle (optionnelle).
+    anthropic_api_key: str = ""
+    invoice_ai_model: str = "claude-opus-5-5"
+
     # Lien vers le dashboard interne, inclus dans les alertes
     dashboard_url: str = "https://dash-track-affra.netlify.app/"
 
@@ -69,6 +81,16 @@ class Settings(BaseSettings):
         if isinstance(value, str) and value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
+
+    @property
+    def r2_configured(self) -> bool:
+        return bool(self.r2_account_id and self.r2_access_key_id and self.r2_secret_access_key and self.r2_bucket)
+
+    @property
+    def r2_endpoint(self) -> str:
+        jurisdiction = self.r2_jurisdiction.strip().lower()
+        prefix = f"{self.r2_account_id}.{jurisdiction}" if jurisdiction else self.r2_account_id
+        return f"https://{prefix}.r2.cloudflarestorage.com"
 
     @property
     def is_dev(self) -> bool:
