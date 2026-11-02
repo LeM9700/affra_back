@@ -213,6 +213,32 @@ La metadata n'accepte ni secrets, ni tokens, ni cookies.
   - `billing_service.create_invoice_for_lead` est le point d'entrée unique à réutiliser.
 - **Import de factures (CSV)** : même point d'entrée, avec `source_system = 'IMPORT'`.
 
+## 10 ter. Import de factures PDF (implémenté)
+
+Factures émises par le logiciel de facturation d'AFFRA RESEAUX (ou tout autre), importées depuis la
+fiche lead du dashboard. Stockage : Cloudflare R2, voir `docs/cloudflare-r2.md`.
+
+1. `POST /internal/leads/{id}/invoice-documents` (multipart `file`) :
+   - type réel vérifié sur les premiers octets (PDF, JPEG, PNG), 10 Mo maximum ;
+   - empreinte SHA-256 unique (même fichier importé deux fois → 409 avec l'id existant) ;
+   - original conservé dans R2 (`invoices/<lead>/<sha256>.<ext>`), jamais public ;
+   - lecture : modèle `FAC…` lu directement dans le PDF (`app/services/invoice_import/template_fac.py`),
+     sinon lecture IA de secours si `ANTHROPIC_API_KEY` est configurée, sinon saisie manuelle ;
+   - contrôles (`analysis.py`) : calcul des lignes, taux de TVA, totaux HT/TVA/TTC comparés au
+     document, SIRET vendeur, nom et ville du client comparés au lead, date (futur, antérieure au
+     lead), numéro déjà enregistré, même montant le même jour ;
+   - la pièce est enregistrée « en attente de revue » : **rien n'est facturé**.
+2. `POST /internal/invoice-documents/{id}/confirm` : l'humain valide (ou corrige) la facture.
+   Les contrôles sont refaits sur ce qu'il a validé, **comparé aux totaux lus dans le PDF** : un
+   montant modifié (donc une commission modifiée) est bloquant. Chaque avertissement accepté exige un
+   motif écrit (10 caractères minimum), conservé dans `invoice_documents.confirmation`. La facture est
+   créée avec `source_system = 'IMPORT'`, son numéro d'origine et les références `CLT…` / `DEV…`.
+3. `POST /internal/invoice-documents/{id}/reject` : pièce écartée avec un motif (fichier conservé).
+4. `GET /internal/invoice-documents/{id}/file-url` : lien de consultation temporaire (5 minutes).
+
+Remise de ligne : `invoice_lines.discount_bp` (1000 = 10 %), appliquée au montant HT de la ligne ;
+0 pour toutes les factures existantes.
+
 ## 10 bis. Déploiement (Railway)
 
 Les migrations Alembic sont appliquées par `preDeployCommand = ["alembic upgrade head"]`
