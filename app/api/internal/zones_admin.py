@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, verify_api_key
@@ -12,11 +13,20 @@ from app.services.revalidation_service import trigger_revalidation
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
+async def _flush_or_conflict(db: AsyncSession) -> None:
+    """Flush ; un slug déjà pris (contrainte UNIQUE) devient une 409 explicite."""
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slug already used by another zone") from exc
+
+
 @router.post("", response_model=ZonePublic, status_code=status.HTTP_201_CREATED)
 async def create_zone(payload: ZoneCreate, db: AsyncSession = Depends(get_db)):
     zone = Zone(**payload.model_dump())
     db.add(zone)
-    await db.flush()
+    await _flush_or_conflict(db)
     await trigger_revalidation("/zone-intervention")
     return zone
 
@@ -33,7 +43,7 @@ async def update_zone(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(zone, field, value)
-    await db.flush()
+    await _flush_or_conflict(db)
     await trigger_revalidation("/zone-intervention")
     return zone
 
