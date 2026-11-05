@@ -40,7 +40,7 @@ async def send_operator_notification(devis: Devis) -> None:
   <tr><td><strong>Délai souhaité</strong></td><td>{_e(devis.delai)}</td></tr>
   <tr><td><strong>Distance tableau électrique</strong></td><td>{_e(devis.distance_tableau)}</td></tr>
 </table>
-<p><em>ID : {devis.id}</em></p>
+<p><em>ID : {_e(devis.id)}</em></p>
 """
 
     try:
@@ -80,7 +80,35 @@ async def send_prospect_confirmation(devis: Devis) -> None:
         raise
 
 
-async def send_custom_email(to: str, subject: str, html_body: str) -> None:
+def text_to_html(message: str) -> str:
+    """Convertit un message texte saisi dans le back-office en HTML sûr.
+
+    Le message est échappé (aucune balise, aucun lien injecté ne survit), puis les sauts de
+    ligne sont rendus en <br>. Le back-office envoie du texte, jamais du HTML.
+
+    Args:
+        message: Texte brut saisi par l'opérateur.
+
+    Returns:
+        Fragment HTML échappé, sauts de ligne préservés.
+    """
+    normalized = message.replace("\r\n", "\n").replace("\r", "\n")
+    return "<br>\n".join(_e(line) for line in normalized.split("\n"))
+
+
+def _single_line(value: str) -> str:
+    """Retire CR/LF d'un en-tête (objet) : empêche l'injection d'en-têtes supplémentaires."""
+    return " ".join(value.splitlines()).strip()
+
+
+async def send_custom_email(to: str, subject: str, message: str) -> None:
+    """Envoie un e-mail libre au client depuis le back-office.
+
+    Args:
+        to: Adresse du destinataire.
+        subject: Objet (texte brut, ramené sur une ligne).
+        message: Corps en texte brut ; échappé avant insertion dans le HTML.
+    """
     if not settings.resend_api_key:
         logger.warning("Resend not configured — skipping custom email to %s", to)
         return
@@ -89,8 +117,9 @@ async def send_custom_email(to: str, subject: str, html_body: str) -> None:
         await _send({
             "from": "noreply@affra-reseaux.fr",
             "to": to,
-            "subject": subject,
-            "html": html_body,
+            "subject": _single_line(subject),
+            "html": f"<div>{text_to_html(message)}</div>",
+            "text": message,
         })
     except Exception as e:
         logger.error("Failed to send custom email to %s: %s", to, e)
