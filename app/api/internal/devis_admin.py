@@ -105,7 +105,7 @@ async def email_devis_client(
     if not devis.email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email for this client")
 
-    await send_custom_email(to=devis.email, subject=payload.subject, html_body=payload.message)
+    await send_custom_email(to=devis.email, subject=payload.subject, message=payload.message)
 
     # Append to notes
     note_entry = f"[Email envoyé] {payload.subject}"
