@@ -12,5 +12,7 @@ class Zone(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ville: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Clé de liaison avec la page ville du front (/zone-intervention/{slug}).
+    slug: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     departement: Mapped[str] = mapped_column(String(10), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)

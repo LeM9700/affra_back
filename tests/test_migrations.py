@@ -61,3 +61,28 @@ async def test_upgrade_downgrade_with_existing_devis(migr_engine):
     run_alembic("upgrade", "head", database_url=MIGR_DATABASE_URL)
     assert await _scalar(migr_engine, "SELECT count(*) FROM leads") == 2
     run_alembic("downgrade", "base", database_url=MIGR_DATABASE_URL)
+
+
+async def test_zones_slug_backfill(migr_engine):
+    # Indépendant de l'état laissé par le test précédent : on repart de zéro jusqu'à 0007.
+    run_alembic("downgrade", "base", database_url=MIGR_DATABASE_URL)
+    run_alembic("upgrade", "0007", database_url=MIGR_DATABASE_URL)
+    async with migr_engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO zones (id, ville, departement, active) VALUES "
+                "(gen_random_uuid(), 'Saint-Geniès-de-Malgoirès', '30', true),"
+                "(gen_random_uuid(), 'Uzès', '30', true),"
+                "(gen_random_uuid(), 'Uzes', '30', true)"
+            )
+        )
+    run_alembic("upgrade", "head", database_url=MIGR_DATABASE_URL)
+    async with migr_engine.connect() as conn:
+        slugs = sorted((await conn.execute(text("SELECT slug FROM zones"))).scalars())
+    assert slugs == ["saint-genies-de-malgoires", "uzes", "uzes-2"]
+
+    run_alembic("downgrade", "0007", database_url=MIGR_DATABASE_URL)
+    async with migr_engine.connect() as conn:
+        assert await conn.scalar(
+            text("SELECT count(*) FROM information_schema.columns WHERE table_name = 'zones' AND column_name = 'slug'")
+        ) == 0
