@@ -16,3 +16,7 @@ pydantic[email]==2.10.4
 google-auth==2.35.0
 gspread==6.1.2
 bcrypt==4.2.1
+boto3==1.43.123
+pdfplumber==0.11.10
+python-multipart==0.0.33
+anthropic==2.3.0

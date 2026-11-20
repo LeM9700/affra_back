@@ -25,11 +25,13 @@ class BillingInfo(_Strict):
 
 
 class InvoiceLineIn(_Strict):
-    description: str = Field(..., min_length=1, max_length=500)
+    description: str = Field(..., min_length=1, max_length=2000)
     quantity: Decimal = Field(..., gt=0, le=100_000, max_digits=12, decimal_places=2)
     unit: str | None = Field(None, max_length=20)
     unit_price_ht_cents: int = Field(..., ge=0, le=MAX_LINE_AMOUNT_CENTS, strict=True)
     vat_rate_bp: Literal[0, 550, 1000, 2000] = 2000
+    # Remise de ligne en points de base (1000 = 10 %), appliquée au montant HT de la ligne.
+    discount_bp: int = Field(0, ge=0, le=10_000, strict=True)
 
 
 class InvoiceCreate(_Strict):
@@ -62,6 +64,7 @@ class InvoiceLineOut(BaseModel):
     unit: str | None
     unit_price_ht_cents: int
     vat_rate_bp: int
+    discount_bp: int
     total_ht_cents: int
 
     model_config = {"from_attributes": True}
@@ -110,6 +113,10 @@ class InvoiceOut(BaseModel):
     payment_terms: str | None
     notes: str | None
     external_reference: str | None
+    # MANUAL (éditeur du dashboard) ou IMPORT (facture d'un autre logiciel, importée en PDF).
+    source_system: str
+    external_customer_ref: str | None
+    external_quote_ref: str | None
     lines: list[InvoiceLineOut]
     commission: CommissionOut | None
     marketing_source: str

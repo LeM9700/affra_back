@@ -67,7 +67,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 API_HEADERS = {"X-API-Key": "test-api-key"}
 
 TABLES = (
-    "commissions", "invoice_lines", "customer_invoices", "invoice_sequences", "customers", "attribution_events",
+    "invoice_documents", "commissions", "invoice_lines", "customer_invoices", "invoice_sequences", "customers", "attribution_events",
     "attribution_decisions", "leads", "visitors", "devis", "admin_users",
 )
 

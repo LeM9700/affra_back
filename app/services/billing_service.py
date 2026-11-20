@@ -47,9 +47,15 @@ def _round_cents(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def line_total_ht_cents(quantity: Decimal, unit_price_ht_cents: int, discount_bp: int = 0) -> int:
+    """Montant HT d'une ligne : quantité × prix unitaire × (1 − remise), arrondi au centime (half up)."""
+    gross = Decimal(quantity) * unit_price_ht_cents
+    return _round_cents(gross * (Decimal(10_000) - discount_bp) / Decimal(10_000))
+
+
 def compute_invoice_totals(lines: list[InvoiceLineIn]) -> InvoiceTotals:
     """Arithmétique Decimal uniquement. TVA calculée par taux sur la base HT cumulée du taux."""
-    line_totals = [_round_cents(Decimal(line.quantity) * line.unit_price_ht_cents) for line in lines]
+    line_totals = [line_total_ht_cents(line.quantity, line.unit_price_ht_cents, line.discount_bp) for line in lines]
     bases: dict[int, int] = {}
     for line, total in zip(lines, line_totals):
         bases[line.vat_rate_bp] = bases.get(line.vat_rate_bp, 0) + total
@@ -101,8 +107,21 @@ async def _invoice_number_exists(db: AsyncSession, number: str) -> bool:
 
 
 async def create_invoice_for_lead(
-    db: AsyncSession, lead_id: uuid.UUID, payload: InvoiceCreate, admin_id: uuid.UUID | None
+    db: AsyncSession,
+    lead_id: uuid.UUID,
+    payload: InvoiceCreate,
+    admin_id: uuid.UUID | None,
+    *,
+    source_system: str = "MANUAL",
+    external_customer_ref: str | None = None,
+    external_quote_ref: str | None = None,
 ) -> tuple[CustomerInvoice, Customer, Commission | None, bool]:
+    """Crée une facture (et le Customer à la première facture, et la commission si AFFRA_DIGITAL).
+
+    source_system = « IMPORT » pour une facture émise par un autre logiciel puis importée : son numéro
+    d'origine est conservé ; external_customer_ref / external_quote_ref gardent les références de ce
+    logiciel (CLT…, DEV…).
+    """
     # Verrou sur le lead : deux premières factures simultanées ne créent pas deux Customers.
     lead = (await db.execute(select(Lead).where(Lead.id == lead_id).with_for_update())).scalar_one_or_none()
     if lead is None:
@@ -158,6 +177,9 @@ async def create_invoice_for_lead(
         payment_terms=payload.payment_terms,
         notes=payload.notes,
         external_reference=payload.external_reference,
+        source_system=source_system,
+        external_customer_ref=external_customer_ref,
+        external_quote_ref=external_quote_ref,
         created_by=admin_id,
     )
     db.add(invoice)
@@ -176,6 +198,7 @@ async def create_invoice_for_lead(
                 unit=line.unit,
                 unit_price_ht_cents=line.unit_price_ht_cents,
                 vat_rate_bp=line.vat_rate_bp,
+                discount_bp=line.discount_bp,
                 total_ht_cents=total,
             )
         )

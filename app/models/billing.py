@@ -91,6 +91,9 @@ class CustomerInvoice(Base):
     # Points d'extension V2 (webhook / import CSV / API logiciel de facturation).
     external_reference: Mapped[str | None] = mapped_column(String(100))
     source_system: Mapped[str] = mapped_column(String(30), nullable=False, default="MANUAL")
+    # Facture importée : références du logiciel d'origine (n° client CLT…, devis DEV…).
+    external_customer_ref: Mapped[str | None] = mapped_column(String(40))
+    external_quote_ref: Mapped[str | None] = mapped_column(String(40))
 
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("admin_users.id", ondelete="RESTRICT"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
@@ -108,11 +111,12 @@ class InvoiceLine(Base):
         UUID(as_uuid=True), ForeignKey("customer_invoices.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     unit: Mapped[str | None] = mapped_column(String(20))
     unit_price_ht_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     vat_rate_bp: Mapped[int] = mapped_column(Integer, nullable=False)  # points de base : 2000 = 20 %
+    discount_bp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 1000 = remise de 10 %
     total_ht_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
